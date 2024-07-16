@@ -1,0 +1,23 @@
+[project]
+name = "statjax"
+version = "0.0.5"
+
+authors = [
+  { name="Sam Jones"},
+]
+
+description = "Data science tools built with a Jax backend."
+readme = "README.md"
+
+requires-python = ">=3.11"
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [ "jax", "jaxlib", "oryx", "optax", "formulaic", "numpy", "pandas"]
+[build-system]
+requires = ["setuptools", "wheel", "jax", "jaxlib",  "oryx", "optax", "formulaic", "numpy", "pandas"]
+build-backend = "setuptools.build_meta"
