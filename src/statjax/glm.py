@@ -345,10 +345,10 @@ def fit_normal_glm(X,y, link, dist, params, ctol = 1e-3, epochs=100):
         params = (jnp.zeros((X.shape[1])), jnp.array([1.0]))
     return fit_glm_ls(X,y, link, dist, params, ctol, epochs)
 
-def NormalGLM(link = identity_link, **kwargs):
-    return GLM(link, Normal,  (-1,-1), fit = fit_normal_glm, **kwargs)
 
-
+class NormalGLM(GLM):
+    def __init__(self, link = identity_link, **kwargs):
+        super().__init__(link, Normal,  (-1,-1), fit = fit_normal_glm, **kwargs)
 
 def fit_logit_glm(X,y, link, dist, params, ctol = 1.0, epochs=100):
 
@@ -356,9 +356,10 @@ def fit_logit_glm(X,y, link, dist, params, ctol = 1.0, epochs=100):
         params = (jnp.zeros((X.shape[1])), )
     return fit_glm_gradient(X,y, link, dist, params, ctol, epochs)
 
-def BernoulliGLM(link = logit_link, **kwargs):
-    return GLM(link, Bernoulli, -1, fit = fit_logit_glm, **kwargs)
 
+class BernoulliGLM(GLM):
+    def __init__(self, link  = logit_link, **kwargs):
+        return super().__init__(link, Bernoulli, -1, fit = fit_logit_glm, **kwargs)
 
 def fit_poisson_glm(X,y, link, dist, params, epochs=100, **kwargs):
 
@@ -371,12 +372,9 @@ def fit_poisson_glm(X,y, link, dist, params, epochs=100, **kwargs):
     return fit_glm_gradient(X,y, link, dist, (params,), ctol = 1e-5, epochs=epochs)
 
 
-def PoissonGLM(link = log_link, **kwargs):
-
-
-    #else: assume user has passed a link
-    return GLM(link, Poisson, (-1.0,), fit = fit_poisson_glm, **kwargs)
-
+class PoissonGLM(GLM):
+    def __init__(self, link = log_link, **kwargs):
+        super().__init__(link, Poisson, (-1.0,), fit = fit_poisson_glm, **kwargs)
 
 
 def  gamma_nef(mu, concentration):
@@ -392,8 +390,9 @@ def fit_gamma_glm(X,y, link, dist, params):
 
     return fit_glm_ls(X,y, link, dist, params, ctol = 1e-3, epochs=100)
 
-def GammaGLM(link = inverse_link, **kwargs):
-    return GLM(link, gamma_nef, (-1.0, -1.0), fit = fit_gamma_glm, **kwargs)
+class GammaGLM(GLM):
+    def __init__(self, link = inverse_link, **kwargs):
+        return super().__init__(link, gamma_nef, (-1.0, -1.0), fit = fit_gamma_glm, **kwargs)
 
 
 
@@ -407,5 +406,11 @@ def fit_inverse_gaussian_glm(X,y, link, dist, params):
 
     return fit_glm_gradient(X,y, link, dist, params, ctol = 1e-3, epochs=100)
 
-def InverseNormalGLM(link = inverse_squared_link, **kwargs):
-    return GLM(link, InverseGaussian, (-1.0, -1.0), fit = fit_inverse_gaussian_glm, **kwargs)
+class InverseNormalGLM(GLM):
+    def __init__(self, link = inverse_squared_link, **kwargs):
+        return super().__init__(link, InverseGaussian, (-1.0, -1.0), fit = fit_inverse_gaussian_glm, **kwargs)
+
+
+
+
+
