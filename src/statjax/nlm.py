@@ -104,13 +104,20 @@ def enet_regularization(l1_penalty, l2_penalty) :
 
     return jit(calc)
 
+class NLM(LinearModel):
+    def __init__(self, predict, loss_function, fit=nlm_fit_adam, regularization = lambda **kwargs:  0, **kwargs):
+        regularization = partial(regularization, **kwargs)
 
-def NLM(predict, loss_function, fit=nlm_fit_adam, regularization = lambda **kwargs:  0, **kwargs):
-    regularization = partial(regularization, **kwargs)
+        fit = partial(fit, predict = predict, loss_function = loss_function, regularization=regularization, **kwargs)
 
-    fit = partial(fit, predict = predict, loss_function = loss_function, regularization=regularization, **kwargs)
+        super().__init__(fit, predict, cov_filler)
 
-    return LinearModel(fit, predict, cov_filler)
+# def NLM(predict, loss_function, fit=nlm_fit_adam, regularization = lambda **kwargs:  0, **kwargs):
+#     regularization = partial(regularization, **kwargs)
+
+#     fit = partial(fit, predict = predict, loss_function = loss_function, regularization=regularization, **kwargs)
+
+#     return LinearModel(fit, predict, cov_filler)
 
 def ElasticNet(l1_penalty, l2_penalty, **kwargs):
     return NLM(predict_ols, mse, nlm_fit, regularization=enet_regularization(l1_penalty, l2_penalty, **kwargs))

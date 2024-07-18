@@ -1,10 +1,11 @@
 import jax.numpy as jnp 
 import jax.random as random
 from jax.nn import one_hot as jnn_one_hot
-
 from jax import jit, vmap
 
 import pandas as pd
+from formulaic import ModelMatrix, model_matrix
+
 import numpy
 from typing import List
 from warnings import warn
@@ -232,7 +233,43 @@ def l2(a):
 
 
 
+'''
+process_input: take a unknown-type array and convert it to a ModelMatrix object. 
 
+X: array-like or ModelMatrix or DataFrame: the input array
+filler_var_name: str: the name of the filler variable to use if X has no column names (i.e. x: x0, x1, ...) 
+spec_base: str: the base of the formulaic string to use for the ModelMatrix object
+spec_transform: str: the transformation to apply to each column of X in the formulaic string
+'''
+import copy
+def process_input(X, filler_var_name, spec_base ="-1 + ", spec_transform="", enforced_spec = "") -> ModelMatrix:
+        X = copy.deepcopy(X)
+        if isinstance(X, ModelMatrix):
+            X_mm = X
+
+        else: # not modelmatrix
+            if isinstance(X, pd.Series):
+                X = pd.DataFrame(X)
+            if isinstance(X, pd.DataFrame): 
+                X.columns = X.columns.str.replace(' ', '_') # replace spaces with underscores for formulaic
+                spec_base += " + ".join([f"{spec_transform}({col})" for col in X.columns])
+            else: # assume numpy array/similar
+                if len(X.shape) == 1:
+                    X = X.reshape(-1,1)
+                    cols = [filler_var_name]
+                else:
+                    cols = [f"{filler_var_name}{i}" for i in range(X.shape[1])]
+                    
+                cols = [col.replace(" ", "_") for col in cols] 
+                X = pd.DataFrame(X, columns=cols)
+                spec_base += " + ".join([f"{spec_transform}({col})" for col in X.columns])
+                
+            if enforced_spec != "":
+                spec_base = enforced_spec
+            # either case, now have dataframe X and a formulaic-compatible spec
+            X_mm = model_matrix(spec_base, X.astype("float64"))
+        return X_mm
+                 
 
 
 

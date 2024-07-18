@@ -12,6 +12,8 @@ from jax.nn import sigmoid
 from oryx.distributions import Normal, Bernoulli, Poisson, Gamma, InverseGaussian
 
 from jax import config
+
+from .util import process_input
 config.update("jax_enable_x64", True)
 
 ve = 1e-8
@@ -211,7 +213,7 @@ class GLM(LinearModel):
         if not isinstance(params_init, tuple):
             params_init = (params_init,)
             
-        self.base = {
+        self.base_methods = {
             "link": link,
             "dist": dist,
             "cov": cov_glm,
@@ -222,92 +224,55 @@ class GLM(LinearModel):
         }
 
     def fit(self, X, y, add_intercept = True): # fit to data,
-
+        if add_intercept == True:
+            spec_base = "1 + "
+        else:
+            spec_base = "-1 + "
         '''
         This is all to deal with variable-type inputs.  
         '''
+        self.X = process_input(X, filler_var_name="x", spec_base = spec_base)
+        self.y = process_input(y, filler_var_name="y")
 
-        if isinstance(X, ModelMatrix):
-            if add_intercept:
-                raise ValueError("Cannot add intercept to existing ModelMatrix. Please add intercept before creating ModelMatrix.")
-            X_jnp = X.values
-            self.X = X
-
-        elif not isinstance(X, ModelMatrix):
-            if isinstance(X, pd.DataFrame): 
-                spec_base =   " + ".join(X.columns)
-
-            else:
-                if len(X.shape) == 1:
-                    X = X.reshape(-1, 1)
-                cols = [f"x{i}" for i in range(1, X.shape[1] + 1)]
-                X = pd.DataFrame(X, columns=cols)
-                spec_base = " + ".join(cols)
-
-            if not add_intercept:
-                spec_base = "-1 + " + spec_base
-
-            self.X = model_matrix(spec_base, X.astype("float64"))
-            X_jnp = jnp.array(self.X.values)
-
-        if isinstance(y, ModelMatrix):
-            self.y = y
-
-        elif not isinstance(y, ModelMatrix):
-
-            if isinstance(y, pd.DataFrame): 
-                assert len(y.columns) == 1
-                y_code = y.columns[0]
-            elif isinstance(y, pd.Series):
-                y_code = y.name
-                y = pd.DataFrame(y)
-            else:
-                y_code = "y"
-                y = pd.DataFrame(y, columns=[y_code])
-                
-            
-            self.y = model_matrix(y_code + "-1", y)
-        
-        y_jnp = jnp.array(self.y.values.astype(float)).ravel()
-
-
+        X_jnp = jnp.array(self.X.values)
+        y_jnp = jnp.array(self.y.values).ravel()
 
 
         '''
         Now, to actually fit the model. 
         '''
 
-        self.params = self.base["fit"](X_jnp, y_jnp,)
+        self.params = self.base_methods["fit"](X_jnp, y_jnp,)
 
         
         self.beta = self.params[0]
-        self.cov = self.base["cov"](X=X_jnp,y=y_jnp, params=self.params)
+        self.cov = self.base_methods["cov"](X=X_jnp,y=y_jnp, params=self.params)
         self.se = jnp.sqrt(jnp.diag(self.cov))
         self.resid = y_jnp - self.predict(X)
 
-        self.nll = nll_glm(X_jnp,y_jnp, self.base["link"], self.base["dist"], *self.params)
+        self.nll = nll_glm(X_jnp,y_jnp, self.base_methods["link"], self.base_methods["dist"], *self.params)
         self.AIC = 2 * X_jnp.shape[1] + 2 * self.nll
         self.BIC =jnp.log(X_jnp.shape[0])  * X_jnp.shape[1] + 2 * self.nll
         
         return self
     
     
-    def predict(self, X) -> jnp.array: # predict from fitted model
-        if not isinstance(X, ModelMatrix):
-            if isinstance(X, pd.DataFrame): 
-                X = model_matrix(self.X.model_spec, X)
-            else:
-                if len(X.shape) == 1:
-                    X = X.reshape(-1, 1)
-                cols = [f"x{i}" for i in range(1, X.shape[1] + 1)]
-                X = pd.DataFrame(X, columns=cols)
-                X = model_matrix(self.X.model_spec, X)
+    # def predict(self, X) -> jnp.array: # predict from fitted model
+    #     if not isinstance(X, ModelMatrix):
+    #         if isinstance(X, pd.DataFrame): 
+    #             X = model_matrix(self.X.model_spec, X)
+    #         else:
+    #             if len(X.shape) == 1:
+    #                 X = X.reshape(-1, 1)
+    #             cols = [f"x{i}" for i in range(1, X.shape[1] + 1)]
+    #             X = pd.DataFrame(X, columns=cols)
+    #             X = model_matrix(self.X.model_spec, X)
         
-        if X.model_spec != self.X.model_spec:
-            raise ValueError("Predictor matrix has different features than those used to fit the model.")
+    #     if X.model_spec != self.X.model_spec:
+    #         raise ValueError("Predictor matrix has different features than those used to fit the model.")
         
-        X_jnp = jnp.array(X.values.astype(float))
-        return self.base["predict"](X_jnp, self.beta)
+    #     X_jnp = jnp.array(X.values.astype(float))
+    #     return self.base["predict"](X_jnp, self.beta)
     
 
 

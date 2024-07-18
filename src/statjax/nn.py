@@ -13,6 +13,8 @@ from formulaic.model_matrix import ModelMatrix
 from statjax.metrics import mse
 from functools import partial
 
+from . util import process_input
+
 class FlexibleMLP(Module):
     features: tuple  # Tuple of integers representing the number of neurons in each layer
     dropout_rate: float = 0.
@@ -73,59 +75,24 @@ def nn_fit(X,y, model,loss_function, regularization = lambda X,beta : 0,  epochs
 
 
 class NNRegression():
-    def __init__(self, output_dim= 1, output_activation=lambda x: x, loss = mse,regularization = lambda X,beta: 0, hidden_layers = (128, 64), optimizer = optax.adam(1e-3), ):
+    def __init__(self, output_dim= 1, output_activation=lambda x: x, loss = mse,regularization = lambda X,beta: 0, hidden_layers = (128, 64), optimizer = optax.adam(1e-3), x_transform = "scale" ):
         self.model = partial(create_mlp, hidden_layers = hidden_layers, output_dim = output_dim, output_activation = output_activation)
         self.optimizer = optimizer
         self.loss_fn = loss
         self.params = None 
         self.regularization = regularization
+        self.x_transform = x_transform
 
     def fit(self, X,y, **kwargs):
 
         '''
         This is all to deal with variable-type inputs.  
         '''
-
-        if isinstance(X, ModelMatrix):
-
-            X_jnp = X.values
-            self.X = X
-
-        elif not isinstance(X, ModelMatrix):
-            if isinstance(X, pd.DataFrame): 
-                spec_base = " + ".join([f"scale({col})" for col in X.columns])
-
-            else:
-                if len(X.shape) == 1:
-                    X = X.reshape(-1, 1)
-                cols = [f"x{i}" for i in range(1, X.shape[1] + 1)]
-                X = pd.DataFrame(X, columns=cols)
-                spec_base = " + ".join([f"scale({col})" for col in cols])
-
         
-            spec_base = spec_base  + "-1"
-            self.X = model_matrix(spec_base, X.astype("float64"))
-            X_jnp = jnp.array(self.X.values)
-            
-        if isinstance(y, ModelMatrix):
-            self.y = y
-
-        elif not isinstance(y, ModelMatrix):
-
-            if isinstance(y, pd.DataFrame): 
-                assert len(y.columns) == 1
-                y_code = y.columns[0]
-            elif isinstance(y, pd.Series):
-                y_code = y.name
-                y = pd.DataFrame(y)
-            else:
-                y_code = "y"
-                y = pd.DataFrame(y, columns=[y_code])
-                
-            
-            self.y = model_matrix(y_code + "-1", y)
-        
-        y_jnp = jnp.array(self.y.values.astype(float)).ravel()
+        self.X = process_input(X, filler_var_name="x", spec_transform=self.x_transform)
+        self.y = process_input(y, filler_var_name="y")
+        X_jnp = jnp.array(self.X.values)
+        y_jnp = jnp.array(self.y.values).ravel()
 
         self.model = self.model(X_jnp.shape[1])
 
@@ -138,16 +105,8 @@ class NNRegression():
         return self
 
     def predict(self, X):
-        if not isinstance(X, ModelMatrix):
-            if isinstance(X, pd.DataFrame): 
-                X = model_matrix(self.X.model_spec, X)
-            else:
-                if len(X.shape) == 1:
-                    X = X.reshape(-1, 1)
-                    
-                cols = [f"x{i}" for i in range(1, X.shape[1] + 1)]
-                X = pd.DataFrame(X, columns=cols)
-                X = model_matrix(self.X.model_spec, X)
+        X = process_input(X, filler_var_name="x", enforced_spec = self.X.model_spec)
+        
         
         if X.model_spec != self.X.model_spec:
             raise ValueError("Predictor matrix has different features than those used to fit the model.")
