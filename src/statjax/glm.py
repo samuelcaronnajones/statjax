@@ -152,10 +152,10 @@ def fit_glm_ls(X,y, link, dist, params, ctol = 1e-3, epochs=100 ):
 
     history = jnp.zeros(epochs)
     history = history.at[0].set(jnp.inf)
-    eta_init = inv_link(y)
+    eta_init = link(y)
     w = fisher_w(eta_init, y, list_params)
 
-    beta_init = solve((X.T *w) @ X, (X.T *w ) @ inverse_link(y))
+    beta_init = solve((X.T *w) @ X, (X.T *w ) @ eta_init)
     
     @jit 
     def update_beta_ls(args):
@@ -257,24 +257,6 @@ class GLM(LinearModel):
         return self
     
     
-    # def predict(self, X) -> jnp.array: # predict from fitted model
-    #     if not isinstance(X, ModelMatrix):
-    #         if isinstance(X, pd.DataFrame): 
-    #             X = model_matrix(self.X.model_spec, X)
-    #         else:
-    #             if len(X.shape) == 1:
-    #                 X = X.reshape(-1, 1)
-    #             cols = [f"x{i}" for i in range(1, X.shape[1] + 1)]
-    #             X = pd.DataFrame(X, columns=cols)
-    #             X = model_matrix(self.X.model_spec, X)
-        
-    #     if X.model_spec != self.X.model_spec:
-    #         raise ValueError("Predictor matrix has different features than those used to fit the model.")
-        
-    #     X_jnp = jnp.array(X.values.astype(float))
-    #     return self.base["predict"](X_jnp, self.beta)
-    
-
 
 def identity_link (x):
     return x
@@ -319,7 +301,7 @@ def fit_logit_glm(X,y, link, dist, params, ctol = 1.0, epochs=100):
 
     if params == (-1,):
         params = (jnp.zeros((X.shape[1])), )
-    return fit_glm_gradient(X,y, link, dist, params, ctol, epochs)
+    return fit_glm_newton_raphson(X,y, link, dist, params, ctol, epochs)
 
 
 class BernoulliGLM(GLM):
