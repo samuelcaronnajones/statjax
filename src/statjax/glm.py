@@ -5,11 +5,12 @@ import jax.numpy as jnp
 from .core import LinearModel
 import pandas as pd
 from formulaic import ModelMatrix,model_matrix
-from jax.scipy.special import erf, erfinv
+from jax.scipy.special import erf, erfinv, ndtr
 
 from jax.nn import sigmoid
 
 from oryx.distributions import Normal, Bernoulli, Poisson, Gamma, InverseGaussian
+from oryx.bijectors import Sigmoid
 
 from jax import config
 
@@ -155,7 +156,7 @@ def fit_glm_ls(X,y, link, dist, params, ctol = 1e-3, epochs=100 ):
     eta_init = link(y)
     w = fisher_w(eta_init, y, list_params)
 
-    beta_init = solve((X.T *w) @ X, (X.T *w ) @ eta_init)
+    beta_init = solve((X.T *w) @ X, (X.T *w ) @ y)
     
     @jit 
     def update_beta_ls(args):
@@ -264,24 +265,33 @@ def identity_link (x):
 def log_link(mu):
     return jnp.log(mu)
 
+
+# @custom_inverse
+# def logit_link(mu):
+#     return jnp.log(mu / (1 - mu + ve))
+
+
+# logit_link.def_inverse_unary(
+#     lambda x: sigmoid(x),# jnp.exp(x) / (1 + jnp.exp(x)),
+#     f_ildj logit_ildj#lambda x: jnp.log(x + ve) + jnp.log(1 - x + ve)# lambda x: -jnp.log(x) - jnp.log(1 - x)
+# )
+
 @custom_inverse
 def logit_link(mu):
-    return mu / (1-mu)
-logit_link.def_inverse_unary(lambda mu: sigmoid(mu),f_ildj = lambda mu: 0)
+    mu = jnp.clip(mu,ve, 1-ve)
+    return Sigmoid().inverse(mu)
+
+logit_link.def_inverse_unary(lambda eta: Sigmoid()(eta), f_ildj=lambda x: 0)
 
 
-
-def probit_link_inverse(mu):
-    return Normal(0., 1.).cdf(mu)
+def probit_link_inverse(eta):
+    return ndtr(eta)
 @custom_inverse
 def probit_link(mu):
-    mu = jnp.clip(mu, 1e-10, 1 - 1e-10)
+    mu = jnp.clip(mu,ve, 1-ve)
     return jnp.sqrt(2) * erfinv(2*mu - 1)
-probit_link.def_inverse_unary(probit_link_inverse,f_ildj = lambda mu: 0)
 
-
-
-# Register the custom inverse function
+probit_link.def_inverse_unary(probit_link_inverse, f_ildj=lambda mu:  (-jnp.log(2 * jnp.pi) - mu**2) / 2.)
 
 
 def inverse_link (mu):
@@ -297,11 +307,11 @@ class NormalGLM(GLM):
     def __init__(self, link = identity_link, **kwargs):
         super().__init__(link, Normal,  (-1,-1), fit = fit_normal_glm, **kwargs)
 
-def fit_logit_glm(X,y, link, dist, params, ctol = 1.0, epochs=100):
+def fit_logit_glm(X,y, link, dist, params, ctol = 1e-5, epochs=1000):
 
     if params == (-1,):
         params = (jnp.zeros((X.shape[1])), )
-    return fit_glm_newton_raphson(X,y, link, dist, params, ctol, epochs)
+    return fit_glm_ls(X,y, link, dist, params, ctol, epochs)
 
 
 class BernoulliGLM(GLM):
