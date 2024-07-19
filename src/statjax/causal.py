@@ -5,8 +5,9 @@ from src.statjax.util import process_input
 from functools import partial
 from . import OLS
 from copy import deepcopy
-from jax import vmap
+from jax import vmap, config
 from . glm import BernoulliGLM
+config.update("jax_enable_x64", True)
 
 def check_overlap(D,X):
     D = process_input(D,"d")
@@ -82,7 +83,7 @@ class RegressionEstimator(CausalEstimator):
 
 
 class PropensityScoreEstimator(CausalEstimator):
-    def __init__(self, propensity_model=BernoulliGLM(), delta = 0.001):
+    def __init__(self, propensity_model=BernoulliGLM(), delta = 0.1):
         self.propensity_model = propensity_model
         self.delta = delta
         self.expectation = [None, None]
@@ -92,8 +93,8 @@ class PropensityScoreEstimator(CausalEstimator):
         self.y = process_input(y, filler_var_name="y")
         self.D = process_input(D, filler_var_name="D")
 
-        self.propensity_model = self.propensity_model.fit(self.X, self.D)
-        self.propensities = self.propensity_model.predict(X)
+        self.propensity_model = self.propensity_model.fit(self.X.values, self.D)
+        self.propensities = self.propensity_model.predict(self.X.values)
 
 
         retained = jnp.array((self.propensities > self.delta) & (self.propensities < 1-self.delta), dtype=float)
@@ -107,12 +108,12 @@ class PropensityScoreEstimator(CausalEstimator):
         self.expectation[1] = jnp.sum( (yj * retained * (Dj) /(self.propensities) ))/ jnp.sum(retained)
 
 
-        self.ate =  self.expectation[0]- self.expectation[1]
+        self.ate =   self.expectation[1] - self.expectation[0]
         return self
 
 
 class DREstimator():
-    def __init__(self, propensity_model = BernoulliGLM(), outcome_model = OLS(), delta = 0.001):
+    def __init__(self, propensity_model = BernoulliGLM(), outcome_model = OLS(), delta = 0.1):
         self.propensity_model = propensity_model
         self.outcome_model = outcome_model
         self.delta = delta
@@ -124,8 +125,8 @@ class DREstimator():
 
 
 
-        self.propensity_model = self.propensity_model.fit(self.X, self.D)
-        self.propensities = self.propensity_model.predict(X)
+        self.propensity_model = self.propensity_model.fit(self.X.values, self.D)
+        self.propensities = self.propensity_model.predict(self.X.values)
 
         retained = jnp.array((self.propensities > self.delta) & (self.propensities < 1-self.delta), dtype=float)
 
@@ -144,14 +145,14 @@ class DREstimator():
         self.model1 = deepcopy(self.outcome_model).fit(X_1, Y_1)
 
         # predict outcomes
-        self.Y0 = self.model0.predict(self.X.copy().loc[retained])
-        self.Y1 = self.model1.predict(self.X.copy().loc[retained])
+        self.Y0 = self.model0.predict(self.X.copy()).ravel()
+        self.Y1 = self.model1.predict(self.X.copy()).ravel()
 
         Dj = self.D.values.ravel()
         yj = self.Y.values.ravel()
     
-        E0 = ((1-Dj)/(1-self.propensities))* (yj - self.Y0)  + self.Y0
-        E1 = (Dj/(self.propensities))* (yj - self.Y1)  + self.Y1
+        E0 = ((1-Dj)/(1-self.propensities.ravel()))* (yj - self.Y0)  + self.Y0
+        E1 = (Dj/(self.propensities.ravel()))* (yj - self.Y1)  + self.Y1
 
         effects = (E1 - E0 )*retained
         self.ate = (effects).mean() / retained.mean()
