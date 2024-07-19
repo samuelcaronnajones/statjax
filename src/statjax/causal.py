@@ -8,6 +8,7 @@ from copy import deepcopy
 from jax import vmap, config
 from . glm import BernoulliGLM
 config.update("jax_enable_x64", True)
+import pandas as pd
 
 def check_overlap(D,X):
     D = process_input(D,"d")
@@ -93,8 +94,8 @@ class PropensityScoreEstimator(CausalEstimator):
         self.y = process_input(y, filler_var_name="y")
         self.D = process_input(D, filler_var_name="D")
 
-        self.propensity_model = self.propensity_model.fit(self.X.values, self.D)
-        self.propensities = self.propensity_model.predict(self.X.values)
+        self.propensity_model = self.propensity_model.fit(pd.DataFrame(self.X), self.D)
+        self.propensities = self.propensity_model.predict(pd.DataFrame(self.X))
 
 
         retained = jnp.array((self.propensities > self.delta) & (self.propensities < 1-self.delta), dtype=float)
@@ -124,9 +125,8 @@ class DREstimator():
         self.Y = process_input(Y, filler_var_name="y")
 
 
-
-        self.propensity_model = self.propensity_model.fit(self.X.values, self.D)
-        self.propensities = self.propensity_model.predict(self.X.values)
+        self.propensity_model = self.propensity_model.fit(pd.DataFrame(self.X), self.D)
+        self.propensities = self.propensity_model.predict(pd.DataFrame(self.X))
 
         retained = jnp.array((self.propensities > self.delta) & (self.propensities < 1-self.delta), dtype=float)
 
