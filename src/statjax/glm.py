@@ -7,10 +7,8 @@ import pandas as pd
 from formulaic import ModelMatrix,model_matrix
 from jax.scipy.special import erf, erfinv, ndtr
 
-from jax.nn import sigmoid
-
 from oryx.distributions import Normal, Bernoulli, Poisson, Gamma, InverseGaussian
-from oryx.bijectors import Sigmoid
+from oryx.bijectors import Sigmoid, Invert
 
 from jax import config
 
@@ -25,11 +23,10 @@ def nll_glm(X,y,inverse_link, dist, *params):
 
     mu = inverse_link(X @ params[0])
     lst_params[0] = mu
-    ll = dist(*lst_params).log_prob(y.ravel())
-    return -jnp.sum(ll)
+    ll = dist(*lst_params).log_prob(y.ravel()) 
+    return -jnp.sum(ll) 
 
-
-def glm_J(X,y, link, dist, params):
+def glm_J(X,link, dist, params):
     param_list = list(params)
     beta = param_list[0]
     eta = X @ beta
@@ -43,7 +40,6 @@ def glm_J(X,y, link, dist, params):
     w = d_eta**2 / v
 
     return X.T * w @ X
-
 
 def fit_glm_newton_raphson(X,y, link, dist, params, ctol = 1e-3, epochs=100):
 
@@ -73,78 +69,22 @@ def fit_glm_newton_raphson(X,y, link, dist, params, ctol = 1e-3, epochs=100):
     return tuple(list_params)
 
 
-def cov_glm(X,y, link, dist, params):
-    return jnp.linalg.inv(glm_J(X,y, link, dist, params))
+def cov_glm(X, y, link, dist, params):
+    return jnp.linalg.inv(glm_J(X, link, dist, params))
 
 from jax import value_and_grad
 from jax.scipy.linalg import solve
 from jax.lax import while_loop
 
 
-def fit_glm_gradient(X,y, link, dist, params, ctol = 1e-3, epochs=100 ):
-
-    list_params = list(params)
-    inv_link = inverse(link)
-
-    history = jnp.zeros(epochs)
-    history = history.at[0].set(jnp.inf)
-
-    def update_beta_fisher(args):
-        beta,  i, history = args
-        i += 1
-        p = [beta] + list_params[1:]
-        loss, dL =  value_and_grad(nll_glm, argnums=(4))(X,y, inv_link, dist, *p)
-
-        J = glm_J(X,y, link, dist, p)
-        beta = solve(J, (J @ beta) - dL)
-
-
-        history = history.at[i].set(loss)
-        return beta, i , history
-    
-
-    def update_nr(index, args):
-        param,  i, history = args
-        i += 1
-
-        loss, dL =  value_and_grad(nll_glm, argnums=(4+index))(X,y, inv_link, dist, *list_params[:index], param, *list_params[index+1:])
-        H =  hessian(nll_glm,argnums =( 4+index))(X,y, inv_link, dist, *list_params[:index], param, *list_params[index+1:]) #glm_J(X,y, link, dist, p)#
-
-
-        param = solve(H, H @ param - dL)
-        history = history.at[i].set(loss)
-        return param, i , history
-    
-    # Define loop condition based on epoch and loss tolerance
-    def cond_fn(args):
-      _,  i, history = args
-      return (i < epochs) & (jnp.abs(history[i - 1] - history[i]) > ctol)
-
-    
-    # beta_init = jnp.linalg.pinv(X.T @ X) @ X.T @ inverse_link(y)
-
-    beta,niter, _=  while_loop(cond_fn, update_beta_fisher, (list_params[0] , 0, history))
-    list_params[0] = beta
-
-    for i in range(1, len(list_params)):
-    # for i, param in enumerate(list_params):
-        update = (partial(update_nr, i))
-        list_params[i] = while_loop(cond_fn, update, (list_params[i], 0, history))[0]
-
-    
-    return tuple(list_params)
-
 def fit_glm_ls(X,y, link, dist, params, ctol = 1e-3, epochs=100 ):
     
     @jit
     def fisher_w(eta, mu, list_params):  
-        
         list_params = list(params)[1:]
-
         v = dist(mu, *list_params).variance()
         d_eta= vmap((grad(inv_link)))(eta) 
         w = d_eta**2 / v
-
         return w
     
 
@@ -156,7 +96,7 @@ def fit_glm_ls(X,y, link, dist, params, ctol = 1e-3, epochs=100 ):
     eta_init = link(y)
     w = fisher_w(eta_init, y, list_params)
 
-    beta_init = solve((X.T *w) @ X, (X.T *w ) @ y)
+    beta_init = solve((X.T *w) @ X, (X.T *w ) @ eta_init)
     
     @jit 
     def update_beta_ls(args):
@@ -172,19 +112,15 @@ def fit_glm_ls(X,y, link, dist, params, ctol = 1e-3, epochs=100 ):
         history = history.at[i].set(loss)
         return beta, i, history
 
-
+    
     def update_nr(index, args):
         param,  i, history = args
         i += 1
-
         loss, dL =  value_and_grad(nll_glm, argnums=(4+index))(X,y, inv_link, dist, *list_params[:index], param, *list_params[index+1:])
-        H =  hessian(nll_glm,argnums =( 4+index))(X,y, inv_link, dist, *list_params[:index], param, *list_params[index+1:]) #glm_J(X,y, link, dist, p)#
-
+        H =  hessian(nll_glm,argnums =( 4+index))(X,y, inv_link, dist, *list_params[:index], param, *list_params[index+1:]) 
         param = solve(H, H @ param - dL)
         history = history.at[i].set(loss)
         return param, i , history
-    
-
 
     # Define loop condition based on epoch and loss tolerance
     def cond_fn(args):
@@ -265,17 +201,6 @@ def identity_link (x):
 def log_link(mu):
     return jnp.log(mu)
 
-
-# @custom_inverse
-# def logit_link(mu):
-#     return jnp.log(mu / (1 - mu + ve))
-
-
-# logit_link.def_inverse_unary(
-#     lambda x: sigmoid(x),# jnp.exp(x) / (1 + jnp.exp(x)),
-#     f_ildj logit_ildj#lambda x: jnp.log(x + ve) + jnp.log(1 - x + ve)# lambda x: -jnp.log(x) - jnp.log(1 - x)
-# )
-
 @custom_inverse
 def logit_link(mu):
     mu = jnp.clip(mu,ve, 1-ve)
@@ -292,7 +217,6 @@ def probit_link(mu):
     return jnp.sqrt(2) * erfinv(2*mu - 1)
 
 probit_link.def_inverse_unary(probit_link_inverse, f_ildj=lambda mu:  (-jnp.log(2 * jnp.pi) - mu**2) / 2.)
-
 
 def inverse_link (mu):
     return  1/mu
@@ -326,7 +250,7 @@ def fit_poisson_glm(X,y, link, dist, params, epochs=100, **kwargs):
         else:
             params = (jnp.ones((X.shape[1])) * ve)
 
-    return fit_glm_gradient(X,y, link, dist, (params,), ctol = 1e-5, epochs=epochs)
+    return fit_glm_ls(X,y, link, dist, (params,), ctol = 1e-3, epochs=epochs)
 
 
 class PoissonGLM(GLM):
@@ -361,7 +285,7 @@ def fit_inverse_gaussian_glm(X,y, link, dist, params):
     if params == (-1.0, -1.0):
         params = (jnp.zeros((X.shape[1])) + ve, jnp.ones(1) )
 
-    return fit_glm_gradient(X,y, link, dist, params, ctol = 1e-3, epochs=100)
+    return fit_glm_ls(X,y, link, dist, params, ctol = 1e-3, epochs=100)
 
 class InverseNormalGLM(GLM):
     def __init__(self, link = inverse_squared_link, **kwargs):
