@@ -17,8 +17,13 @@ def check_overlap(D,X):
     treated = X.loc[D.values == 1]
     treated_max = treated.max(axis=0)
     treated_min = treated.min(axis=0)
+    treatment_group =  ((X >= treated_min) & (X <= treated_max)).all(axis=1)
 
-    return ((X >= treated_min) & (X <= treated_max)).all(axis=1)
+    control = X.loc[D.values == 0]
+    control_max = control.max(axis=0)
+    control_min = control.min(axis=0)
+    control_group =  ((X >= control_min) & (X <= control_max)).all(axis=1)
+    return treatment_group & control_group
 
 class CausalEstimator():
 
