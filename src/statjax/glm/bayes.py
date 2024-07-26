@@ -11,6 +11,7 @@ from functools import partial
 
 from . glm  import glm_init_beta, glm_predict
 from .. core import LinearModel, fit_r2, fit_r2_adj
+from ..util import process_input
 
 def BayesGLM_pass(aux_params, error_distribution, prior, inverse_link, X_shape, key):
     x_key, beta_key, error_key = random.split(key, 3)
@@ -100,4 +101,7 @@ class BayesGLM(LinearModel):
                                                            "ci": BayesGLM_ci,
                                                               "r2": fit_r2,
                                                                 "r2_adj": fit_r2_adj}, **kwargs)
-                                                        
+        
+    def test_beta(self, X, beta):
+        X = process_input(X, filler_var_name="x", enforced_spec=self.X.model_spec)
+        return self.inverse_link(X.values @ beta)
