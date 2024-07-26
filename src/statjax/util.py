@@ -245,6 +245,8 @@ import copy
 def process_input(X, filler_var_name, spec_base ="-1 + ", spec_transform="", enforced_spec = "") -> ModelMatrix:
         X = copy.deepcopy(X)
         if isinstance(X, ModelMatrix):
+            if enforced_spec != "" and enforced_spec != X.model_spec:
+                raise ValueError("ModelMatrix object has different model spec than fit spec. Either pass a ModelMatrix with the correct spec or a non-ModelMatrix object.")
             X_mm = X
 
         else: # not modelmatrix

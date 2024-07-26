@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 from jax.scipy.special import betainc
+from oryx.distributions import Gamma
 
 
 """
@@ -54,3 +55,9 @@ def t_distribution_cdf(t, nu):
     
     return cdf_values
 
+
+def GammaNEF(mu, phi):
+    concentration = 1 / phi  # This is equivalent to the shape parameter
+    rate = 1 / (mu * phi)
+    return Gamma(concentration, rate)
+    
