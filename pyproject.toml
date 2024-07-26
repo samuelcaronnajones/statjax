@@ -1,6 +1,6 @@
 [project]
 name = "statjax"
-version = "0.0.7"
+version = "0.0.8"
 
 authors = [
   { name="Sam Jones"},
@@ -17,7 +17,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-dependencies = [ "jax", "jaxlib", "oryx", "optax", "formulaic", "numpy", "pandas"]
+dependencies = [ "jax", "jaxlib", "oryx", "optax", "formulaic", "numpy<2.0.0", "pandas"]
 [build-system]
-requires = ["setuptools", "wheel", "jax", "jaxlib",  "oryx", "optax", "formulaic", "numpy", "pandas"]
+requires = ["setuptools", "wheel", "jax", "jaxlib",  "oryx", "optax", "formulaic", "numpy<2.0.0", "pandas"]
 build-backend = "setuptools.build_meta"
